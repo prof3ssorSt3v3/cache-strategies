@@ -7,7 +7,6 @@ const cacheList = [
   './404.html',
   './404.png',
   './main.js',
-  './favicon1.ico',
 ];
 
 self.addEventListener('install', (ev) => {
