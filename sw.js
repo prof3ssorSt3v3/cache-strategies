@@ -1,6 +1,6 @@
 const version = 2;
 const cacheName = `thatsWhatSheSaid${version}`;
-const cacheList = ['./', './index.html', './favicon.ico', './main.css', './404.html', './404.png', './main.js'];
+const cacheList = ['./', './index.html', './favicon1.ico', './main.css', './404.html', './404.png', './main.js'];
 
 self.addEventListener('install', (ev) => {
   //load the cacheList array into the cache
