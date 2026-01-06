@@ -1,13 +1,6 @@
 const version = 2;
 const cacheName = `thatsWhatSheSaid${version}`;
-const cacheList = [
-  './',
-  './index.html',
-  './main.css',
-  './404.html',
-  './404.png',
-  './main.js',
-];
+const cacheList = ['./', './index.html', './main.css', './404.html', './404.png', './main.js'];
 
 self.addEventListener('install', (ev) => {
   //load the cacheList array into the cache
@@ -22,9 +15,7 @@ self.addEventListener('activate', (ev) => {
   //delete old versions of the cache
   ev.waitUntil(
     caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter((key) => key != cacheName).map((nm) => caches.delete(nm))
-      );
+      return Promise.all(keys.filter((key) => key != cacheName).map((nm) => caches.delete(nm)));
     })
   );
 });
@@ -33,23 +24,19 @@ self.addEventListener('fetch', (ev) => {
   //handle fetch requests
   //online? external? font? css? img? html? specific folder?
   const isOnline = self.navigator.onLine;
+  console.warn({ isOnline });
+
   const url = new URL(ev.request.url);
-  const isImage =
-    url.hostname.includes('picsum.photos') ||
-    url.pathname.includes('.png') ||
-    url.pathname.endsWith('.jpg');
+  const isImage = url.hostname.includes('picsum.photos') || url.pathname.includes('.png') || url.pathname.endsWith('.jpg');
 
   const isJSON = url.hostname.includes('random-data-api.com');
 
-  const isCSS =
-    url.pathname.endsWith('.css') || url.hostname.includes('googleapis.com');
+  const isCSS = url.pathname.endsWith('.css') || url.hostname.includes('googleapis.com');
   const isHTML = ev.request.mode === 'navigate';
-  const isFont =
-    url.hostname.includes('gstatic') || url.pathname.endsWith('woff2');
+  const isFont = url.hostname.includes('gstatic') || url.pathname.endsWith('woff2');
 
   const selfUrl = new URL(self.location);
-  const isExternal =
-    ev.request.mode == 'cors' || selfUrl.hostname !== url.hostname;
+  const isExternal = ev.request.mode == 'cors' || selfUrl.hostname !== url.hostname;
 
   if (isOnline) {
     ev.respondWith(networkRevalidateAndCache(ev));
@@ -96,19 +83,17 @@ function staleWhileRevalidate(ev) {
 function networkRevalidateAndCache(ev) {
   //try fetch first and fallback on cache
   //update cache if fetch was successful
-  return fetch(ev.request, { mode: 'cors', credentials: 'omit' }).then(
-    (fetchResponse) => {
-      if (fetchResponse.ok) {
-        //put in cache
-        return caches.open(cacheName).then((cache) => {
-          cache.put(ev.request, fetchResponse.clone());
-          return fetchResponse;
-        });
-      } else {
-        return caches.match(ev.request);
-      }
+  return fetch(ev.request, { mode: 'cors', credentials: 'omit' }).then((fetchResponse) => {
+    if (fetchResponse.ok) {
+      //put in cache
+      return caches.open(cacheName).then((cache) => {
+        cache.put(ev.request, fetchResponse.clone());
+        return fetchResponse;
+      });
+    } else {
+      return caches.match(ev.request);
     }
-  );
+  });
 }
 function placeholderImage(ev) {
   //return a specific placeholder image from the cache
