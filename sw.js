@@ -7,7 +7,7 @@ self.addEventListener('install', (ev) => {
   ev.waitUntil(
     caches.open(cacheName).then((cache) => {
       cache.addAll(cacheList);
-    })
+    }),
   );
 });
 
@@ -16,7 +16,9 @@ self.addEventListener('activate', (ev) => {
   ev.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(keys.filter((key) => key != cacheName).map((nm) => caches.delete(nm)));
-    })
+      //this only handles one cache name.
+      // filter() needs modification if using multiple caches
+    }),
   );
 });
 
@@ -31,8 +33,11 @@ self.addEventListener('fetch', (ev) => {
 
   const isJSON = url.hostname.includes('random-data-api.com');
 
+  let destination = ev.request.destination; //destination property
+  let isForHTML = destination == '' ? false : true; //request came from HTML element
+
   const isCSS = url.pathname.endsWith('.css') || url.hostname.includes('googleapis.com');
-  const isHTML = ev.request.mode === 'navigate';
+  const isHTMLPage = ev.request.mode === 'navigate';
   const isFont = url.hostname.includes('gstatic') || url.pathname.endsWith('woff2');
 
   const selfUrl = new URL(self.location);
@@ -45,56 +50,77 @@ self.addEventListener('fetch', (ev) => {
   }
 });
 
-function cacheOnly(ev) {
-  //only return what is in the cache
-  return caches.match(ev.request);
+async function cacheOnly(ev) {
+  //only the response from the cache
+  const cached = await caches.match(ev.request);
+  return cached || new Response(null, { status: 404 });
 }
-function cacheFirst(ev) {
-  //return from cache or fetch if not in cache
-  return caches.match(ev.request).then((cacheResponse) => {
-    //return cacheResponse if not null
-    return cacheResponse || fetch(ev.request);
-  });
+
+async function cacheFirst(ev) {
+  const cacheResponse = await caches.match(ev.request);
+  if (cacheResponse) {
+    return cacheResponse;
+  }
+  try {
+    return await fetch(ev.request);
+  } catch (err) {
+    return new Response(null, { status: 404 });
+  }
 }
-function networkOnly(ev) {
-  //only return fetch response
-  return fetch(ev.request);
+
+async function networkOnly(ev) {
+  try {
+    return await fetch(ev.request);
+  } catch (err) {
+    return new Response(null, { status: 504, statusText: 'Network error' });
+  }
 }
+
 function networkFirst(ev) {
-  //try fetch and fallback on cache
-  return fetch(ev.request).then((fetchResponse) => {
-    if (fetchResponse.ok) return fetchResponse;
-    return caches.match(ev.request);
-  });
-}
-function staleWhileRevalidate(ev) {
-  //check cache and fallback on fetch for response
-  //always attempt to fetch a new copy and update the cache
-  return caches.match(ev.request).then((cacheResponse) => {
-    let fetchResponse = fetch(ev.request).then((response) => {
-      return caches.open(cacheName).then((cache) => {
-        cache.put(ev.request, response.clone());
-        return response;
-      });
-    });
-    return cacheResponse || fetchResponse;
-  });
-}
-function networkRevalidateAndCache(ev) {
-  //try fetch first and fallback on cache
-  //update cache if fetch was successful
-  return fetch(ev.request, { mode: 'cors', credentials: 'omit' }).then((fetchResponse) => {
-    if (fetchResponse.ok) {
-      //put in cache
-      return caches.open(cacheName).then((cache) => {
-        cache.put(ev.request, fetchResponse.clone());
-        return fetchResponse;
-      });
-    } else {
-      return caches.match(ev.request);
+  //try fetch then cache
+  return fetch(ev.request).then(async (response) => {
+    if (response.status > 0 && !response.ok) {
+      const cached = await caches.match(ev.request);
+      return cached || new Response(null, { status: 404 });
     }
+    return response;
   });
 }
+
+async function staleWhileRevalidate(ev, _cacheName = cacheName) {
+  const cacheResponse = await caches.match(ev.request);
+
+  const fetchPromise = fetch(ev.request)
+    .then(async (response) => {
+      if ((response && response.status === 0) || response.ok) {
+        const cache = await caches.open(_cacheName);
+        cache.put(ev.request, response.clone());
+      }
+      return response;
+    })
+    .catch(() => null); // swallow network errors
+
+  return cacheResponse || (await fetchPromise) || new Response(null, { status: 404 });
+}
+
+async function networkFirstAndRevalidate(ev, _cacheName = cacheName) {
+  try {
+    const response = await fetch(ev.request);
+    if (response.status > 0 && !response.ok) {
+      const cached = await caches.match(ev.request);
+      return cached || new Response(null, { status: 404 });
+    }
+    const cache = await caches.open(_cacheName);
+    if (!ev.request.url.startsWith('chrome-extension')) {
+      cache.put(ev.request, response.clone());
+    }
+    return response;
+  } catch (err) {
+    const cached = await caches.match(ev.request);
+    return cached || new Response(null, { status: 504, statusText: 'Network error' });
+  }
+}
+
 function placeholderImage(ev) {
   //return a specific placeholder image from the cache
   return caches.match('./404.png');
